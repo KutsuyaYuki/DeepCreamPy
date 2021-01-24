@@ -6,7 +6,7 @@
 
 import sys, time
 from PySide2.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QGroupBox, QDesktopWidget, QApplication
-from PySide2.QtWidgets import QAction, qApp, QApplication, QMessageBox, QRadioButton, QPushButton, QTextEdit, QLabel
+from PySide2.QtWidgets import QAction, QApplication, QMessageBox, QRadioButton, QPushButton, QTextEdit, QLabel
 from PySide2.QtWidgets import QSizePolicy,QMainWindow, QStatusBar, QProgressBar
 from PySide2.QtCore import Qt, QObject
 from PySide2.QtGui import QFont, QTextCursor
@@ -25,7 +25,8 @@ class MainWindow(QWidget):
 		self.initUI()
 		self.setSignals()
 		self.decensor = Decensor(self)
-		self.load_model()
+		self.current_is_mosaic = None
+		#self.load_model()
 
 	def initUI(self):
 
@@ -145,10 +146,16 @@ class MainWindow(QWidget):
 		for cb in censorButtons:
 			if cb.isChecked():
 				censorType = cb.text()
-		if censorType == 'Bar censor':
+		is_mosaic = censorType == 'Bar censor'
+		if self.current_is_mosaic != is_mosaic:
+			self.decensor = Decensor(self)
+			self.current_is_mosaic = is_mosaic
+			self.load_model()
+		if is_mosaic:
 			self.decensor.is_mosaic = False
 		else:
 			self.decensor.is_mosaic = True
+
 
 		#variations count
 		variationsElements = self.variationsGroupBox.children()

@@ -1,5 +1,5 @@
 import tensorflow as tf
-import tensorflow.contrib.layers as layers
+import tensorflow.compat.v1.layers as layers
 import numpy as np
 import random as rr
 import math as mt
@@ -7,13 +7,13 @@ import cv2
 from scipy import misc
 
 def instance_norm(input, name="instance_norm"):
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
         depth = input.get_shape()[3]
-        scale = tf.get_variable("scale", [depth], initializer=tf.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
-        offset = tf.get_variable("offset", [depth], initializer=tf.constant_initializer(0.0))
-        mean, variance = tf.nn.moments(input, axes=[1,2], keep_dims=True)
+        scale = tf.compat.v1.get_variable("scale", [depth], initializer=tf.compat.v1.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
+        offset = tf.compat.v1.get_variable("offset", [depth], initializer=tf.compat.v1.constant_initializer(0.0))
+        mean, variance = tf.nn.moments(x=input, axes=[1,2], keepdims=True)
         epsilon = 1e-5
-        inv = tf.rsqrt(variance + epsilon)
+        inv = tf.math.rsqrt(variance + epsilon)
         normalized = (input-mean)*inv
         return scale*normalized + offset
 
@@ -31,7 +31,7 @@ def make_sq_mask(size, m_size, batch_size):
 def softmax(input):
 
     k = tf.exp(input - 3)
-    k = tf.reduce_sum(k, 3, True)
+    k = tf.reduce_sum(input_tensor=k, axis=3, keepdims=True)
     # k = k - num * tf.ones_like(k)
 
     ouput = tf.exp(input - 3) / k
@@ -52,9 +52,9 @@ def reduce_var(x, axis=None, keepdims=False):
     # Returns
         A tensor with the variance of elements of `x`.
     """
-    m = tf.reduce_mean(x, axis=axis, keepdims=True)
+    m = tf.reduce_mean(input_tensor=x, axis=axis, keepdims=True)
     devs_squared = tf.square(x - m)
-    return tf.reduce_mean(devs_squared, axis=axis, keepdims=keepdims)
+    return tf.reduce_mean(input_tensor=devs_squared, axis=axis, keepdims=keepdims)
 
 def reduce_std(x, axis=None, keepdims=False):
     """Standard deviation of a tensor, alongside the specified axis.
@@ -73,7 +73,7 @@ def reduce_std(x, axis=None, keepdims=False):
     return tf.sqrt(reduce_var(x, axis=axis, keepdims=keepdims))
 
 def l2_norm(v, eps=1e-12):
-    return v / (tf.reduce_sum(v ** 2) ** 0.5 + eps)
+    return v / (tf.reduce_sum(input_tensor=v ** 2) ** 0.5 + eps)
 
 def ff_mask(size, b_zise, maxLen, maxWid, maxAng, maxNum, maxVer, minLen = 20, minWid = 15, minVer = 5):
 
@@ -162,7 +162,7 @@ def spectral_norm(w, name, iteration=1):
     w_shape = w.shape.as_list()
     w = tf.reshape(w, [-1, w_shape[-1]])
 
-    u = tf.get_variable(name+"u", [1, w_shape[-1]], initializer=tf.truncated_normal_initializer(), trainable=False)
+    u = tf.compat.v1.get_variable(name+"u", [1, w_shape[-1]], initializer=tf.compat.v1.truncated_normal_initializer(), trainable=False)
 
     u_hat = u
     v_hat = None
@@ -171,13 +171,13 @@ def spectral_norm(w, name, iteration=1):
         power iteration
         Usually iteration = 1 will be enough
         """
-        v_ = tf.matmul(u_hat, tf.transpose(w))
+        v_ = tf.matmul(u_hat, tf.transpose(a=w))
         v_hat = l2_norm(v_)
 
         u_ = tf.matmul(v_hat, w)
         u_hat = l2_norm(u_)
 
-    sigma = tf.matmul(tf.matmul(v_hat, w), tf.transpose(u_hat))
+    sigma = tf.matmul(tf.matmul(v_hat, w), tf.transpose(a=u_hat))
     w_norm = w / sigma
 
     with tf.control_dependencies([u.assign(u_hat)]):
@@ -186,35 +186,35 @@ def spectral_norm(w, name, iteration=1):
     return w_norm
 
 def convolution_SN(tensor, output_dim, kernel_size, stride, name):
-    _, h, w, c = [i.value for i in tensor.get_shape()]
+    _, h, w, c = [i for i in tensor.get_shape()]
 
-    w = tf.get_variable(name=name + 'w', shape=[kernel_size, kernel_size, c, output_dim], initializer=layers.xavier_initializer())
-    b = tf.get_variable(name=name + 'b', shape=[output_dim], initializer=tf.constant_initializer(0.0))
+    w = tf.compat.v1.get_variable(name=name + 'w', shape=[kernel_size, kernel_size, c, output_dim], initializer=tf.compat.v1.keras.initializers.glorot_normal())
+    b = tf.compat.v1.get_variable(name=name + 'b', shape=[output_dim], initializer=tf.compat.v1.constant_initializer(0.0))
 
-    output = tf.nn.conv2d(tensor, filter=spectral_norm(w, name=name + 'w'), strides=[1, stride, stride, 1], padding='SAME') + b
+    output = tf.nn.conv2d(input=tensor, filters=spectral_norm(w, name=name + 'w'), strides=[1, stride, stride, 1], padding='SAME') + b
 
     return output
 
 def dense_SN(tensor, output_dim, name):
-    _, h, w, c = [i.value for i in tensor.get_shape()]
+    _, h, w, c = [i for i in tensor.get_shape()]
 
-    w = tf.get_variable(name=name + 'w', shape=[h, w, c, output_dim], initializer=layers.xavier_initializer())
-    b = tf.get_variable(name=name + 'b', shape=[output_dim], initializer=tf.constant_initializer(0.0))
+    w = tf.compat.v1.get_variable(name=name + 'w', shape=[h, w, c, output_dim], initializer=tf.compat.v1.keras.initializers.glorot_normal())
+    b = tf.compat.v1.get_variable(name=name + 'b', shape=[output_dim], initializer=tf.compat.v1.constant_initializer(0.0))
 
-    output = tf.nn.conv2d(tensor, filter=spectral_norm(w, name=name + 'w'), strides=[1, 1, 1, 1], padding='VALID') + b
+    output = tf.nn.conv2d(input=tensor, filters=spectral_norm(w, name=name + 'w'), strides=[1, 1, 1, 1], padding='VALID') + b
 
     return output
 
 def dense_RED_SN(tensor, name):
     sn_w = None
 
-    _, h, w, c = [i.value for i in tensor.get_shape()]
+    _, h, w, c = [i for i in tensor.get_shape()]
     h = int(h)
     w = int(w)
     c = int(c)
 
-    weight = tf.get_variable(name=name + '_w', shape=[h*w, 1, c, 1], initializer=layers.xavier_initializer())
-    b = tf.get_variable(name=name + '_b', shape=[1, h, w, 1], initializer=tf.constant_initializer(0.0))
+    weight = tf.compat.v1.get_variable(name=name + '_w', shape=[h*w, 1, c, 1], initializer=tf.compat.v1.keras.initializers.glorot_normal())
+    b = tf.compat.v1.get_variable(name=name + '_b', shape=[1, h, w, 1], initializer=tf.compat.v1.constant_initializer(0.0))
 
     for it in range(h*w):
         w_pixel = weight[it:it+1, :, :, :]
@@ -226,8 +226,8 @@ def dense_RED_SN(tensor, name):
             sn_w = tf.concat([sn_w, sn_w_pixel], axis=0)
 
     w_rs = tf.reshape(sn_w, [h, w, c, 1])
-    w_rs_t = tf.transpose(w_rs, [3, 0, 1, 2])
+    w_rs_t = tf.transpose(a=w_rs, perm=[3, 0, 1, 2])
 
-    output_RED = tf.reduce_sum(tensor*w_rs_t + b, axis=3, keepdims=True)
+    output_RED = tf.reduce_sum(input_tensor=tensor*w_rs_t + b, axis=3, keepdims=True)
 
     return output_RED
